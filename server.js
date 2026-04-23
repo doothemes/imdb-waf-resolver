@@ -3,18 +3,24 @@
 /**
  * imdb-waf-resolver
  *
- * Microservicio interno que navega a IMDb con Chromium headless y devuelve el HTML
- * renderizado de la ficha. Chromium maneja transparentemente el challenge de AWS WAF:
- * el navegador resuelve el challenge en JS y espera a que aparezca el `ld+json` de
- * la página real antes de devolver el HTML.
+ * Microservicio Node + Chromium que navega a IMDb y devuelve el `ld+json`
+ * renderizado de la ficha de un título, resolviendo transparentemente el
+ * challenge de AWS WAF.
  *
- * Por qué no hacemos token + cURL: AWS WAF fingerprint'ea el TLS del cliente; aunque
- * le pasemos la cookie válida a cURL, WAF rechaza porque la huella TLS no coincide
- * con Chromium. Hacer todo el fetch desde Chromium elimina esa fricción.
+ * Diseño:
+ *   - Un único Chromium persistente con context reusable (cookies sobreviven
+ *     entre requests, incluyendo aws-waf-token → los scrapes después del
+ *     primero saltan el challenge).
+ *   - Warm-up en boot: un scrape dummy en background al arrancar para que
+ *     el primer request real llegue con WAF ya superado.
+ *   - `waitUntil: 'commit'` + `waitForSelector('script[type=application/ld+json]')`:
+ *     retornamos apenas aparece el ld+json en el DOM, sin esperar load/DOMContentLoaded.
+ *   - Extracción en el navegador (`page.evaluate`): solo cruzamos ~2KB por la
+ *     red Node↔cliente en vez de 1.5MB de HTML renderizado.
  *
  * Endpoints:
- *   POST /scrape     -> body { imdb_id } -> { status, html, final_url, elapsed_ms }
- *   GET  /health     -> { ok, browser: bool, context: bool }
+ *   POST /scrape   body { imdb_id } → { status, ld_json, final_url, elapsed_ms }
+ *   GET  /health                    → { ok, browser, context }
  */
 
 const fastify = require('fastify')({ logger: { level: 'info' } });
@@ -31,6 +37,7 @@ const PORT           = parseInt(process.env.PORT || '3100', 10);
 const HOST           = process.env.HOST || '127.0.0.1';
 const AUTH_TOKEN     = process.env.AUTH_TOKEN || '';
 const NAV_TIMEOUT_MS = 60000;
+const WARMUP_IMDB_ID = 'tt0111161'; // The Shawshank Redemption — estable, pocos cambios
 const UA_REAL        = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
 
 if(HOST !== '127.0.0.1' && HOST !== 'localhost' && !AUTH_TOKEN){
@@ -39,7 +46,7 @@ if(HOST !== '127.0.0.1' && HOST !== 'localhost' && !AUTH_TOKEN){
 }
 
 // ---------------------------------------------------------------------------
-// Browser context persistente — se abre una sola vez y se reutiliza
+// Browser context persistente
 // ---------------------------------------------------------------------------
 
 let browser     = null;
@@ -58,6 +65,8 @@ async function ensureContext() {
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-blink-features=AutomationControlled',
+                '--disable-extensions',
+                '--disable-background-timer-throttling',
             ],
         });
         context = await browser.newContext({
@@ -66,7 +75,7 @@ async function ensureContext() {
             viewport:  { width: 1366, height: 768 },
             extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
         });
-        // Bloquear recursos pesados que no aportan al scraping de ld+json
+        // Bloquear recursos que no aportan al scraping — acelera challenge + page load
         await context.route('**/*', (route) => {
             const t = route.request().resourceType();
             if(t === 'image' || t === 'media' || t === 'font' || t === 'stylesheet'){
@@ -94,7 +103,7 @@ async function resetContext() {
 }
 
 // ---------------------------------------------------------------------------
-// Scrape — navega con Chromium y espera al ld+json de IMDb
+// Scrape
 // ---------------------------------------------------------------------------
 
 async function scrapeImdb(imdbId) {
@@ -104,32 +113,35 @@ async function scrapeImdb(imdbId) {
     const start = Date.now();
     try {
         const response = await page.goto(url, {
-            waitUntil: 'domcontentloaded',
+            waitUntil: 'commit',   // retorna al primer byte — no espera DOMContentLoaded
             timeout:   NAV_TIMEOUT_MS,
         });
 
-        // Esperar al selector que solo existe en la ficha real de IMDb.
-        // Si WAF sirvió challenge, el JS del navegador lo resuelve y
-        // la navegación termina recargando al HTML legítimo.
-        let ldJsonFound = false;
+        // Espera a que el ld+json aparezca en el DOM.
+        // Si WAF sirvió challenge, el JS del browser lo resuelve y la
+        // navegación termina reemplazando el DOM con el HTML real.
+        let ldJson = null;
         try {
             await page.waitForSelector('script[type="application/ld+json"]', {
                 timeout: NAV_TIMEOUT_MS,
                 state:   'attached',
             });
-            ldJsonFound = true;
+            // Extraer el JSON directamente en el browser — evita serializar ~1.5MB de HTML
+            const raw = await page.evaluate(() => {
+                const s = document.querySelector('script[type="application/ld+json"]');
+                return s ? s.textContent : null;
+            });
+            if(raw){
+                try { ldJson = JSON.parse(raw); } catch(_) { /* keep null */ }
+            }
         } catch(_) {
-            // timeout — probablemente WAF no dejó pasar
+            // timeout — WAF bloqueó o la página no tiene ld+json
         }
 
-        const html  = await page.content();
-        const final = page.url();
-        const status = response ? response.status() : 0;
         return {
-            status,
-            html,
-            final_url:  final,
-            ld_json:    ldJsonFound,
+            status:     response ? response.status() : 0,
+            ld_json:    ldJson,
+            final_url:  page.url(),
             elapsed_ms: Date.now() - start,
         };
     } finally {
@@ -170,13 +182,11 @@ fastify.post('/scrape', async (req, reply) => {
             imdb_id: imdbId,
             status:  r.status,
             ms:      r.elapsed_ms,
-            bytes:   r.html.length,
-            ld_json: r.ld_json,
+            ld_json: !!r.ld_json,
         }, 'scrape');
         return r;
     } catch(err) {
         req.log.error({ imdb_id: imdbId, err: err.message }, 'scrape failed');
-        // Si el context se rompió, resetear para que la próxima request relance Chromium
         await resetContext();
         return reply.code(502).send({ error: 'scrape_failed', message: err.message });
     }
@@ -189,11 +199,20 @@ fastify.get('/health', async () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Boot
+// Boot + warm-up
 // ---------------------------------------------------------------------------
 
 fastify.listen({ port: PORT, host: HOST })
-    .then(() => fastify.log.info(`imdb-waf-resolver escuchando en http://${HOST}:${PORT}`))
+    .then(() => {
+        fastify.log.info(`imdb-waf-resolver escuchando en http://${HOST}:${PORT}`);
+        // Warm-up en background: resuelve el challenge antes del primer request real
+        setTimeout(() => {
+            fastify.log.info({ imdb_id: WARMUP_IMDB_ID }, 'warm-up iniciando');
+            scrapeImdb(WARMUP_IMDB_ID)
+                .then(r => fastify.log.info({ ms: r.elapsed_ms, ld_json: !!r.ld_json }, 'warm-up listo'))
+                .catch(err => fastify.log.warn({ err: err.message }, 'warm-up falló'));
+        }, 1500);
+    })
     .catch(err => { fastify.log.error(err); process.exit(1); });
 
 async function shutdown() {

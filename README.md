@@ -53,16 +53,24 @@ HOST=0.0.0.0 PORT=3100 AUTH_TOKEN="mi-token-manual" \
 ```json
 {
   "status": 200,
-  "html": "<!DOCTYPE html>...",
+  "ld_json": {
+    "@context": "https://schema.org",
+    "@type": "Movie",
+    "url": "https://www.imdb.com/title/tt0111161/",
+    "name": "The Shawshank Redemption",
+    "image": "https://m.media-amazon.com/images/M/....jpg",
+    "contentRating": "R",
+    "aggregateRating": { "ratingCount": 2900000, "ratingValue": 9.3 },
+    "datePublished": "1994-10-14"
+  },
   "final_url": "https://www.imdb.com/title/tt0111161/",
-  "ld_json": true,
-  "elapsed_ms": 6041
+  "elapsed_ms": 1850
 }
 ```
 
-- `status`: status HTTP de la navegación inicial (puede ser 202 aunque el HTML final sea la ficha real — Chromium resuelve el challenge).
-- `html`: DOM renderizado final.
-- `ld_json`: `true` si se encontró el `<script type="application/ld+json">` (tu señal de éxito).
+- `status`: status HTTP de la navegación inicial (puede ser 202 aunque el contenido final sea la ficha real — Chromium resuelve el challenge transparentemente).
+- `ld_json`: **objeto JSON-LD ya parseado** de la ficha, o `null` si no se encontró.
+- `final_url`: URL final tras redirects.
 - `elapsed_ms`: tiempo total de la operación.
 
 ### `GET /health`
@@ -92,12 +100,11 @@ $response = $client->post('http://127.0.0.1:3100/scrape', [
         'Authorization' => 'Bearer ' . env('imdbResolverToken'),
         'Content-Type'  => 'application/json',
     ],
-    'json' => ['imdb_id' => $imdb_id],
+    'json'    => ['imdb_id' => $imdb_id],
     'timeout' => 90,
 ]);
-$data = json_decode($response->getBody(), true);
-preg_match('/<script type="application\/ld\+json">(.*?)<\/script>/s', $data['html'], $m);
-$ldJson = json_decode($m[1] ?? '{}', true);
+$data   = json_decode($response->getBody(), true);
+$ldJson = $data['ld_json'] ?? null;  // array ya parseado, listo para usar
 ```
 
 **Node:**
@@ -110,7 +117,7 @@ const res = await fetch('http://127.0.0.1:3100/scrape', {
     },
     body: JSON.stringify({ imdb_id: 'tt0111161' }),
 });
-const { html } = await res.json();
+const { ld_json } = await res.json();
 ```
 
 ---
@@ -130,9 +137,13 @@ El `AUTH_TOKEN` se valida con comparación tiempo-constante. El servidor rechaza
 
 ## Arquitectura
 
-Chromium persistente + context reusable. Abre un solo browser al primer request y atiende N requests concurrentes con pages separadas. Bloquea imágenes / fonts / CSS / media para acelerar (solo interesa el HTML).
+Chromium persistente + context reusable. Abre un solo browser al primer request y atiende N requests concurrentes con pages separadas. Bloquea imágenes / fonts / CSS / media para acelerar.
 
-La primera request tras el arranque tarda ~5–10 s (Chromium cold start). Siguientes con el context caliente: ~1–3 s.
+**Warm-up al arrancar:** el servicio dispara un scrape dummy en background apenas termina de bootear. Así el `aws-waf-token` queda en el context antes del primer request real — el cold-start lo paga el warm-up, no el usuario.
+
+**Fast path:** una vez el context tiene el cookie de WAF, IMDb sirve HTML directo sin challenge. Scrapes típicos: ~1–3 s. Cuando WAF rota el token (raro), paga el costo de challenge una vez (~5–8 s) y vuelve al fast path.
+
+**Payload mínimo:** el ld+json se extrae dentro del navegador con `page.evaluate()`. El cliente recibe solo el JSON parseado (~2 KB), no el HTML entero (~1.5 MB).
 
 Stack:
 - [Fastify 4](https://fastify.dev/) — servidor HTTP
