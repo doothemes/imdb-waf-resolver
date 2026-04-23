@@ -1,0 +1,22 @@
+{
+    "name": "imdb-waf-resolver",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Microservicio que resuelve el challenge de AWS WAF en IMDb y entrega cookies reutilizables",
+    "main": "server.js",
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node server.js",
+        "install-chromium": "playwright install chromium",
+        "install-deps-linux": "playwright install-deps chromium"
+    },
+    "dependencies": {
+        "fastify": "^4.28.1",
+        "playwright": "^1.47.0",
+        "playwright-extra": "^4.3.6",
+        "puppeteer-extra-plugin-stealth": "^2.11.2"
+    }
+}

@@ -1,0 +1,5 @@
+node_modules/
+logs/
+ecosystem.config.js
+*.log
+.DS_Store
