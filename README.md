@@ -23,6 +23,22 @@ El instalador:
 
 Correrlo otra vez actualiza al último `main` y preserva el token existente.
 
+## Desinstalación
+
+**Sidecar + código** (conserva Node, PM2 y caché de Chromium — útil si los usa otro proyecto):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --uninstall
+```
+
+**Purga total** (+ Node + PM2 + Chromium cache + NodeSource repo):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --purge
+```
+
+Las reglas de `ufw` no se tocan automáticamente — el script te recuerda quitarlas manualmente.
+
 ### Variables de entorno opcionales
 
 ```bash

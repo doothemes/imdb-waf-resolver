@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# imdb-waf-resolver — one-shot installer for Ubuntu/Debian
+# imdb-waf-resolver — one-shot installer para Ubuntu/Debian
 #
-# Uso:
+# Instalar / actualizar:
 #   curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash
 #
-# Idempotente: correrlo de nuevo actualiza al último main y reinicia PM2.
+# Desinstalar (sidecar + código, conserva Node/PM2):
+#   curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --uninstall
+#
+# Desinstalar TODO (+ Node + PM2 + caché de Chromium):
+#   curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --purge
+#
+# Install es idempotente: correrlo de nuevo actualiza al último main y reinicia PM2.
 # Preserva el AUTH_TOKEN existente si ya fue instalado antes.
 
 set -euo pipefail
@@ -32,11 +38,97 @@ warn() { echo -e "${C_YELLOW}!${C_RESET} $*"; }
 die()  { echo -e "${C_RED}✗${C_RESET} $*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
+# Parseo de flags
+# ---------------------------------------------------------------------------
+
+MODE="install"
+for arg in "$@"; do
+    case "$arg" in
+        --uninstall) MODE="uninstall" ;;
+        --purge)     MODE="purge" ;;
+        -h|--help)
+            cat <<EOF
+imdb-waf-resolver installer
+
+Flags:
+  (sin flag)    Instalar o actualizar al último main
+  --uninstall   Quitar sidecar + código (conserva Node.js, PM2, Chromium cache)
+  --purge       Quitar TODO (+ Node.js + PM2 + Chromium cache)
+  -h, --help    Muestra esta ayuda
+EOF
+            exit 0
+            ;;
+        *) die "Flag desconocido: $arg (usa --help)" ;;
+    esac
+done
+
+# ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 
 [ "$(id -u)" -eq 0 ] || die "Debe correr como root (usa sudo)."
 command -v apt-get >/dev/null || die "Requiere apt-get (Ubuntu/Debian)."
+
+# ---------------------------------------------------------------------------
+# Modo: uninstall / purge
+# ---------------------------------------------------------------------------
+
+if [ "$MODE" = "uninstall" ] || [ "$MODE" = "purge" ]; then
+    log "Modo: $MODE"
+
+    if command -v pm2 >/dev/null; then
+        log "Deteniendo y eliminando proceso PM2"
+        pm2 delete imdb-waf-resolver >/dev/null 2>&1 || true
+        pm2 save --force >/dev/null 2>&1 || true
+    fi
+
+    if [ -d "$INSTALL_DIR" ]; then
+        log "Eliminando $INSTALL_DIR"
+        rm -rf "$INSTALL_DIR"
+        ok "Código + config + logs borrados"
+    else
+        warn "$INSTALL_DIR no existe"
+    fi
+
+    if [ "$MODE" = "purge" ]; then
+        if command -v pm2 >/dev/null; then
+            log "Quitando auto-start de systemd"
+            pm2 unstartup systemd >/dev/null 2>&1 || true
+            systemctl disable pm2-root >/dev/null 2>&1 || true
+            rm -f /etc/systemd/system/pm2-root.service
+        fi
+        log "Quitando caché de Playwright/Chromium"
+        rm -rf /root/.cache/ms-playwright
+        rm -rf /root/.pm2
+        if command -v pm2 >/dev/null; then
+            log "Quitando PM2 global"
+            npm uninstall -g pm2 --silent >/dev/null 2>&1 || true
+        fi
+        if command -v node >/dev/null; then
+            log "Quitando Node.js + NodeSource repo"
+            apt-get purge -y -qq nodejs >/dev/null 2>&1 || true
+            rm -f /etc/apt/sources.list.d/nodesource.list
+            rm -f /etc/apt/keyrings/nodesource.gpg
+            apt-get autoremove -y -qq >/dev/null 2>&1 || true
+        fi
+        ok "Purga completa"
+    else
+        ok "Uninstall completo (Node/PM2/Chromium cache conservados)"
+    fi
+
+    cat <<EOF
+
+${C_GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}
+${C_GREEN}  Desinstalación lista${C_RESET}
+${C_GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}
+
+  Si ya no necesitas el firewall de este servicio, quita la regla ufw:
+    sudo ufw status numbered
+    sudo ufw delete <numero-de-la-regla-3100>
+
+EOF
+    exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # Dependencias del sistema
