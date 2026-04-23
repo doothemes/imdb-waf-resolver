@@ -107,7 +107,9 @@ async function resetContext() {
 // ---------------------------------------------------------------------------
 
 async function scrapeImdb(imdbId) {
-    const url = `https://www.imdb.com/title/${imdbId}/`;
+    // El `?ref_=` hace que WAF trate la request como navegación orgánica (tolerante,
+    // sirve challenge resoluble) en vez de "acceso directo" (202 con body vacío).
+    const url = `https://www.imdb.com/title/${imdbId}/?ref_=tt_sims_tt_t_1`;
     const ctx = await ensureContext();
     const page = await ctx.newPage();
     const start = Date.now();
