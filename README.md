@@ -40,14 +40,21 @@ HOST=0.0.0.0 PORT=3100 AUTH_TOKEN="mi-token-manual" \
 
 ## API
 
-### `POST /scrape`
+### `POST /scrape` o `GET /scrape`
 
-**Auth:** `Authorization: Bearer <AUTH_TOKEN>`
+**Auth:** `Authorization: Bearer <AUTH_TOKEN>` en ambos.
 
-**Body:**
+**POST body:**
 ```json
 { "imdb_id": "tt0111161" }
 ```
+
+**GET query:**
+```
+/scrape?imdb_id=tt0111161
+```
+
+Ambos endpoints son equivalentes y retornan la misma estructura. Usa GET para pruebas rápidas en browser/curl, POST en producción.
 
 **Response:**
 ```json
@@ -84,12 +91,18 @@ Sin auth. Retorna:
 
 ## Ejemplos de cliente
 
-**cURL:**
+**cURL (POST):**
 ```bash
 curl -X POST http://127.0.0.1:3100/scrape \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"imdb_id":"tt0111161"}'
+```
+
+**cURL (GET, más corto para testing):**
+```bash
+curl -H "Authorization: Bearer $AUTH_TOKEN" \
+  "http://127.0.0.1:3100/scrape?imdb_id=tt0111161"
 ```
 
 **PHP (CodeIgniter 4):**

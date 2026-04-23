@@ -173,8 +173,7 @@ if(AUTH_TOKEN){
 
 const IMDB_ID_RE = /^tt\d{7,8}$/;
 
-fastify.post('/scrape', async (req, reply) => {
-    const imdbId = req.body && req.body.imdb_id;
+async function handleScrape(imdbId, req, reply) {
     if(!imdbId || !IMDB_ID_RE.test(imdbId)){
         return reply.code(400).send({ error: 'invalid_imdb_id' });
     }
@@ -192,6 +191,14 @@ fastify.post('/scrape', async (req, reply) => {
         await resetContext();
         return reply.code(502).send({ error: 'scrape_failed', message: err.message });
     }
+}
+
+fastify.post('/scrape', async (req, reply) => {
+    return handleScrape(req.body && req.body.imdb_id, req, reply);
+});
+
+fastify.get('/scrape', async (req, reply) => {
+    return handleScrape(req.query && req.query.imdb_id, req, reply);
 });
 
 fastify.get('/health', async () => ({
