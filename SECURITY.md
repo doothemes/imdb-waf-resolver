@@ -30,7 +30,7 @@ Solo la última versión de `main` recibe actualizaciones de seguridad. No hay b
 
 Para actualizar:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash
+curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash
 ```
 
 ---
@@ -270,7 +270,7 @@ El binario de Chromium vive en `/root/.cache/ms-playwright/chromium-XXXX/`. Si u
 
 1. **Siempre bind a loopback**. PHP-FPM workers alcanzan `127.0.0.1` sin problema:
    ```bash
-   HOST=127.0.0.1 bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
+   HOST=127.0.0.1 bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
    ```
 
 2. **Nunca corras `--purge`** en un Plesk — podría remover deps compartidas. Usa solo `--uninstall`.
@@ -383,7 +383,7 @@ pm2 status
 sudo cat /opt/imdb-waf-resolver/ecosystem.config.js | grep -v AUTH_TOKEN   # sin exponer el token
 
 # Actualizar
-curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash
+curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash
 
 # Después: verificar que el token y la config se preservaron
 sudo grep -E "HOST|PORT|AUTH_TOKEN|CONCURRENCY" /opt/imdb-waf-resolver/ecosystem.config.js

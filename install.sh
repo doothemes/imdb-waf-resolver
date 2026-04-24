@@ -2,17 +2,17 @@
 # imdb-waf-resolver — one-shot installer para Ubuntu/Debian
 #
 # Instalar / actualizar:
-#   curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash
+#   curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash
 #
 # Exponer a una red (requiere AUTH_TOKEN):
 #   HOST=0.0.0.0 AUTH_TOKEN=$(openssl rand -hex 32) \
-#     bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
+#     bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
 #
 # Desinstalar (sidecar + código, conserva Node/PM2):
-#   curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --uninstall
+#   curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash -s -- --uninstall
 #
 # Desinstalar también Chromium cache + PM2 systemd unit (NO toca Node ni PM2 global):
-#   curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --purge
+#   curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash -s -- --purge
 #
 # Install es idempotente: correrlo de nuevo actualiza al último main y reinicia PM2.
 # Preserva el AUTH_TOKEN existente si ya fue instalado antes.
