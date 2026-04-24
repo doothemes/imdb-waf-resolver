@@ -144,26 +144,38 @@ fi
 
 # ---------------------------------------------------------------------------
 # Resolver config final
+#
+# Prioridad (mayor → menor):
+#   1. Env var explícito (ej: HOST=0.0.0.0 bash install.sh)
+#   2. Valor existente en ecosystem.config.js (preserva re-instalaciones)
+#   3. Default del script
 # ---------------------------------------------------------------------------
 
-HOST="${HOST:-$DEFAULT_HOST}"
-PORT="${PORT:-$DEFAULT_PORT}"
-CONCURRENCY="${CONCURRENCY:-$DEFAULT_CONCURRENCY}"
+read_existing() {
+    # Lee un valor del ecosystem.config.js existente, si lo hay
+    local key="$1"
+    [ -f "$INSTALL_DIR/ecosystem.config.js" ] || return 1
+    grep -oP "${key}:\s*'\K[^']*" "$INSTALL_DIR/ecosystem.config.js" 2>/dev/null | head -1
+}
+
+EXISTING_HOST="$(read_existing HOST || true)"
+EXISTING_PORT="$(read_existing PORT || true)"
+EXISTING_TOKEN="$(read_existing AUTH_TOKEN || true)"
+EXISTING_CONCURRENCY="$(read_existing CONCURRENCY || true)"
+
+HOST="${HOST:-${EXISTING_HOST:-$DEFAULT_HOST}}"
+PORT="${PORT:-${EXISTING_PORT:-$DEFAULT_PORT}}"
+CONCURRENCY="${CONCURRENCY:-${EXISTING_CONCURRENCY:-$DEFAULT_CONCURRENCY}}"
 
 # Si HOST no es loopback, AUTH_TOKEN es obligatorio
 if [ "$HOST" != "127.0.0.1" ] && [ "$HOST" != "localhost" ]; then
-    if [ -z "${AUTH_TOKEN:-}" ]; then
-        # Preservar el existente si ya había instalación, sino generar
-        EXISTING_TOKEN=""
-        if [ -f "$INSTALL_DIR/ecosystem.config.js" ]; then
-            EXISTING_TOKEN="$(grep -oP "AUTH_TOKEN:\s*'\K[^']+" "$INSTALL_DIR/ecosystem.config.js" 2>/dev/null || true)"
-        fi
-        AUTH_TOKEN="${EXISTING_TOKEN:-$(openssl rand -hex 32)}"
-    fi
+    AUTH_TOKEN="${AUTH_TOKEN:-${EXISTING_TOKEN:-$(openssl rand -hex 32)}}"
 else
-    # Loopback — token opcional (vacío por default)
-    AUTH_TOKEN="${AUTH_TOKEN:-}"
+    # Loopback — token opcional, preserva si existía
+    AUTH_TOKEN="${AUTH_TOKEN:-${EXISTING_TOKEN:-}}"
 fi
+
+[ -n "$EXISTING_HOST" ] && log "Preservando config existente: HOST=$HOST PORT=$PORT CONCURRENCY=$CONCURRENCY"
 
 # ---------------------------------------------------------------------------
 # Port collision check

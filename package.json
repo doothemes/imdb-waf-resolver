@@ -1,6 +1,6 @@
 {
     "name": "imdb-waf-resolver",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "private": true,
     "description": "Microservicio Node + Chromium que navega a IMDb y devuelve el ld+json, resolviendo transparentemente el challenge de AWS WAF",
     "main": "server.js",
