@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/in
 
 Para reportar un problema:
 
-1. Envía un correo a **security@ews.pe** con:
+1. Envía un correo a **doothemes@ews.pe** con:
    - Descripción del problema.
    - PoC o pasos para reproducir.
    - Impacto que consideras (opcional).
