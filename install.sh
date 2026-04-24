@@ -30,12 +30,13 @@ DEFAULT_PORT="3100"
 DEFAULT_HOST="127.0.0.1"       # loopback por seguridad; override con HOST=0.0.0.0
 DEFAULT_CONCURRENCY="3"
 
-# Colores
-C_GREEN='\033[1;32m'
-C_YELLOW='\033[1;33m'
-C_RED='\033[1;31m'
-C_BLUE='\033[1;34m'
-C_RESET='\033[0m'
+# Colores — ANSI-C quoting ($'...') almacena el char de escape real, no la cadena
+# literal "\033[…". Así funcionan tanto dentro de `echo -e` como de heredocs `cat <<EOF`.
+C_GREEN=$'\033[1;32m'
+C_YELLOW=$'\033[1;33m'
+C_RED=$'\033[1;31m'
+C_BLUE=$'\033[1;34m'
+C_RESET=$'\033[0m'
 
 log()  { echo -e "${C_BLUE}==>${C_RESET} $*"; }
 ok()   { echo -e "${C_GREEN}✓${C_RESET} $*"; }
