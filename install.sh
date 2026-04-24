@@ -23,8 +23,8 @@ set -euo pipefail
 # Config
 # ---------------------------------------------------------------------------
 
-REPO_URL="https://github.com/doothemes/imdb-waf-resolver.git"
-INSTALL_DIR="/opt/imdb-waf-resolver"
+REPO_URL="${REPO_URL:-https://github.com/doothemes/imdb-waf-resolver.git}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/imdb-waf-resolver}"
 NODE_MAJOR="20"
 DEFAULT_PORT="3100"
 DEFAULT_HOST="127.0.0.1"       # loopback por seguridad; override con HOST=0.0.0.0
