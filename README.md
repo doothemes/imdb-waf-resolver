@@ -14,43 +14,50 @@ curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/in
 
 El instalador:
 - Instala Node 20 LTS (si falta)
-- Instala PM2 global
-- Clona el repo a `/opt/imdb-waf-resolver`
+- Instala PM2 global + `pm2-logrotate` (10 MB por archivo, 7 retenidos, comprimidos)
+- Clona el repo a `/opt/imdb-waf-resolver` con permisos `700` (solo root)
 - Instala deps npm + Chromium headless (via Playwright)
-- Genera un `AUTH_TOKEN` aleatorio (`openssl rand -hex 32`)
-- Arranca con PM2 y lo deja persistente en boot
-- Imprime URL, token, y ejemplo de `curl`
+- Genera `ecosystem.config.js` con permisos `600` (el token solo lo lee root)
+- Arranca con PM2 bindeado por defecto a **`127.0.0.1`** (solo loopback — seguro por defecto)
+- Lo deja persistente en boot (systemd)
+- Verifica que el puerto esté libre antes de arrancar
 
 Correrlo otra vez actualiza al último `main` y preserva el token existente.
 
 ## Desinstalación
 
-**Sidecar + código** (conserva Node, PM2 y caché de Chromium — útil si los usa otro proyecto):
+**Sidecar + código** (conserva Node, PM2 y caché de Chromium):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --uninstall
 ```
 
-**Purga total** (+ Node + PM2 + Chromium cache + NodeSource repo):
+**Purga** — lo anterior + PM2 systemd unit + caché de Chromium + `~/.pm2`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --purge
 ```
 
-Las reglas de `ufw` no se tocan automáticamente — el script te recuerda quitarlas manualmente.
+**`--purge` NO toca Node.js ni PM2 global** — pueden ser usados por otros servicios (especialmente en Plesk). Si quieres removerlos, el script imprime los comandos manuales.
+
+Las reglas de `ufw` nunca se tocan automáticamente — se removen a mano.
 
 ### Variables de entorno opcionales
 
 ```bash
-HOST=0.0.0.0 PORT=3100 AUTH_TOKEN="mi-token-manual" \
+# Exponer a la red (requiere AUTH_TOKEN)
+HOST=0.0.0.0 AUTH_TOKEN=$(openssl rand -hex 32) \
   bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 ```
 
-| Var         | Default          | Descripción                                      |
-|-------------|------------------|--------------------------------------------------|
-| `HOST`      | `0.0.0.0`        | Interfaz donde escucha el servidor.              |
-| `PORT`      | `3100`           | Puerto TCP.                                      |
-| `AUTH_TOKEN`| aleatorio        | Bearer token obligatorio si `HOST != 127.0.0.1`. |
+| Var            | Default       | Descripción                                                |
+|----------------|---------------|------------------------------------------------------------|
+| `HOST`         | `127.0.0.1`   | Interfaz de bind. Para exponer: `0.0.0.0` (exige token).   |
+| `PORT`         | `3100`        | Puerto TCP. Verifica colisión antes de instalar.           |
+| `AUTH_TOKEN`   | (auto o vacío)| Bearer token. Auto-generado si `HOST != 127.0.0.1`.        |
+| `CONCURRENCY`  | `3`           | Scrapes paralelos máximo. Excesos van a cola.              |
+| `RATE_LIMIT_MAX` | `120`       | Requests por ventana/IP. `0` para desactivar.              |
+| `RATE_LIMIT_WIN` | `1 minute`  | Ventana del rate limit.                                    |
 
 ---
 
@@ -153,14 +160,26 @@ const { ld_json } = await res.json();
 
 ## Seguridad
 
-Si expones el puerto a internet, **configura tu firewall** para aceptar solo desde las IPs de tus clientes:
+**Defaults seguros**:
+- Bind a `127.0.0.1` — no expuesto a la red sin opt-in explícito
+- `ecosystem.config.js` con permisos `600` — token solo legible por root
+- Dir `/opt/imdb-waf-resolver/` con permisos `700`
+- Rate-limit por IP: 120 req/min (ajustable)
+- Semáforo de concurrencia (3 simultáneas) — frena DoS por ráfagas
+- Comparación tiempo-constante del Bearer token (`timingSafeEqual`)
+- `bodyLimit: 1024` — rechaza payloads inflados
+- El servidor **se niega a arrancar** si `HOST != 127.0.0.1` y no hay `AUTH_TOKEN`
+
+**Si expones el puerto a internet** (HOST=0.0.0.0):
 
 ```bash
+# Allow-list tu firewall a IPs específicas
 sudo ufw allow from <IP_DEL_CLIENTE> to any port 3100 proto tcp
 sudo ufw reload
-```
 
-El `AUTH_TOKEN` se valida con comparación tiempo-constante. El servidor rechaza arrancar si `HOST != 127.0.0.1` y no hay `AUTH_TOKEN` definido.
+# Considerar HTTPS con nginx reverse proxy + Let's Encrypt
+# (no incluido en este repo — documentación pendiente)
+```
 
 ---
 
@@ -189,8 +208,14 @@ WAF no dejó pasar. Prueba con otra IP de origen; residenciales pasan mejor que 
 **`ECONNREFUSED 127.0.0.1:3100`**  
 El sidecar no está corriendo. `pm2 status`, `pm2 logs imdb-waf-resolver`.
 
-**Memoria alta (>500 MB sostenido)**  
-PM2 reinicia automáticamente (`max_memory_restart: '500M'`). Si se repite, abre un issue con `pm2 monit`.
+**Memoria alta (>800 MB sostenido)**  
+PM2 reinicia automáticamente (`max_memory_restart: '800M'`). Si se repite frecuentemente, baja `CONCURRENCY` o revisa con `pm2 monit`.
+
+**HTTP 429 (rate limited)**  
+Estás sobre el límite de 120 req/min/IP. Sube con `RATE_LIMIT_MAX=300 … bash <(curl …)` y `pm2 restart imdb-waf-resolver --update-env`.
+
+**Requests en cola**  
+El endpoint `/health` reporta `active` (scrapes corriendo) y `queued` (en espera). Si `queued` crece, sube `CONCURRENCY` — asegúrate que la RAM lo tolere.
 
 **Comandos útiles:**
 ```bash
