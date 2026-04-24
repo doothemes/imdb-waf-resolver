@@ -390,6 +390,8 @@ const { ld_json } = await res.json();
 
 ## Seguridad
 
+Para el modelo de amenaza completo, controles activos, riesgos conocidos, hardening por escenario y rotación de token → **[SECURITY.md](SECURITY.md)**.
+
 **Defaults seguros**:
 
 | Mecanismo | Estado |
