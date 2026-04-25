@@ -82,6 +82,11 @@ done
 [ "$(id -u)" -eq 0 ] || die "Debe correr como root (usa sudo)."
 command -v apt-get >/dev/null || die "Requiere apt-get (Ubuntu/Debian)."
 
+# Evita prompts interactivos colgando el install (apt + needrestart en Ubuntu 22.04+)
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
+
 # ---------------------------------------------------------------------------
 # Modo: uninstall / purge
 # ---------------------------------------------------------------------------
