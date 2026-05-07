@@ -28,10 +28,8 @@ Microservicio Node + Chromium que navega a IMDb y devuelve el `ld+json` de la fi
 **Requisitos**: Ubuntu / Debian, acceso `root` (o `sudo`).
 
 ```bash
-curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash
 ```
-
-> El host `imdb-waf-resolver.dbmvs.com` es un mirror del `install.sh` en `main`, sincronizado diariamente. Si prefieres la fuente canónica: `https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh`.
 
 El instalador:
 
@@ -74,7 +72,7 @@ Al terminar verás:
 El cliente (PHP, Node, Python…) corre en el mismo host. Bind a loopback, sin token, sin firewall.
 
 ```bash
-curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash
 ```
 
 En tu cliente:
@@ -89,7 +87,7 @@ Sin `Authorization` header — el sidecar rechaza auth solo si `HOST != 127.0.0.
 Los clientes están en otra máquina de la misma red privada. Bind a IP privada, con token obligatorio.
 
 ```bash
-HOST=0.0.0.0 bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
+HOST=0.0.0.0 bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 ```
 
 Firewall restringido al segmento privado:
@@ -111,7 +109,7 @@ sudo grep AUTH_TOKEN /opt/imdb-waf-resolver/ecosystem.config.js
 Bind a `0.0.0.0` + token fuerte + firewall allow-list + preferiblemente TLS.
 
 ```bash
-HOST=0.0.0.0 bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
+HOST=0.0.0.0 bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 ```
 
 **Restringe el firewall a IPs específicas**:
@@ -136,20 +134,20 @@ El instalador es **idempotente** — correrlo sobre una instalación existente h
 
 ```bash
 # Actualizar al último main (preserva config)
-curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash
 ```
 
 Si quieres **cambiar** la config durante una actualización, especifica la env var explícita:
 
 ```bash
 # Cambiar el puerto
-PORT=4000 bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
+PORT=4000 bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 
 # Cambiar el bind a público (requiere AUTH_TOKEN)
-HOST=0.0.0.0 bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
+HOST=0.0.0.0 bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 
 # Subir la concurrencia máxima
-CONCURRENCY=6 bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
+CONCURRENCY=6 bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 ```
 
 **Nota**: si actualizas desde v1.3.x o anterior, es posible que tu token haya sido regenerado (bug de migración conocido en v1.4.0, resuelto en v1.4.1). Verifica el token post-update:
@@ -167,7 +165,7 @@ Y propaga el nuevo valor a todos tus clientes.
 Para el proceso, borra `/opt/imdb-waf-resolver/` (código, config, logs). **Conserva** Node.js, PM2, cache de Chromium — por si los usa otro proyecto.
 
 ```bash
-curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --uninstall
 ```
 
 ### `--purge` — Todo lo anterior + más
@@ -180,7 +178,7 @@ Añade:
 **NO toca** Node.js ni PM2 global — pueden ser usados por otros servicios (especialmente en Plesk). Si quieres removerlos, el script imprime los comandos manuales al final.
 
 ```bash
-curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh | sudo bash -s -- --purge
+curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh | sudo bash -s -- --purge
 ```
 
 ### Reglas de firewall
@@ -209,7 +207,7 @@ Cómo pasarlas al instalador:
 
 ```bash
 HOST=0.0.0.0 PORT=4000 CONCURRENCY=5 RATE_LIMIT_MAX=300 \
-  bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
+  bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 ```
 
 Para cambiarlas **después** de instalar, edita `/opt/imdb-waf-resolver/ecosystem.config.js` y reinicia con `pm2 restart imdb-waf-resolver --update-env`.
@@ -498,7 +496,7 @@ ss -tlnp | grep 3100   # debe mostrar 0.0.0.0:3100 o la IP deseada
 
 Si dice `127.0.0.1:3100`, re-instala con HOST explícito:
 ```bash
-HOST=0.0.0.0 bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
+HOST=0.0.0.0 bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 ```
 
 ### `HTTP 401 unauthorized`
@@ -542,14 +540,14 @@ pm2 restart imdb-waf-resolver --update-env
 
 Sobrepasaste el rate limit. Sube el umbral:
 ```bash
-RATE_LIMIT_MAX=300 bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
+RATE_LIMIT_MAX=300 bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 ```
 
 ### Scrapes en cola
 
 `/health` reporta `queued > 0` persistente = la concurrencia es insuficiente para tu tráfico. Sube `CONCURRENCY`:
 ```bash
-CONCURRENCY=6 bash <(curl -fsSL https://imdb-waf-resolver.dbmvs.com/install.sh)
+CONCURRENCY=6 bash <(curl -fsSL https://raw.githubusercontent.com/doothemes/imdb-waf-resolver/main/install.sh)
 ```
 
 Monitorea RAM después — cada scrape paralelo cuesta 50-100 MB extra.
