@@ -200,6 +200,9 @@ sudo ufw delete <número>
 | `PORT` | `3100` | Puerto TCP. |
 | `AUTH_TOKEN` | auto-generado si `HOST != 127.0.0.1`, si no vacío | Bearer token. |
 | `CONCURRENCY` | `3` | Scrapes paralelos máximos. Excedentes van a cola. |
+| `QUEUE_MAX` | `50` | Tope de la cola de espera. Al llenarse se responde `503 busy` en vez de encolar sin fin. |
+| `QUEUE_WAIT_MS` | `30000` | Máximo en cola antes de devolver `503 busy`. |
+| `LD_WAIT_MS` | `20000` | Espera del `ld+json` tras navegar. Un scrape sano tarda ~2s; subirlo solo alarga los bloqueos. |
 | `RATE_LIMIT_MAX` | `120` | Requests máximas por ventana/IP en `/scrape`. |
 | `RATE_LIMIT_WIN` | `1 minute` | Ventana del rate limit (`@fastify/rate-limit`). |
 
@@ -260,7 +263,14 @@ Ambos métodos son equivalentes. Usa GET para pruebas rápidas desde browser / t
 - `400 invalid_imdb_id` — el `imdb_id` no matchea `^tt\d{7,8}$`.
 - `401 unauthorized` — token faltante o inválido.
 - `429 rate_limited` — sobrepasaste `RATE_LIMIT_MAX` para tu IP; `retry_after` en el body.
-- `502 scrape_failed` — error interno de Chromium; el context se resetea automáticamente.
+- `502 scrape_failed` — error interno de Chromium; si el browser murió, se recicla automáticamente.
+- `503 busy` — no había slot libre. `reason` es `queue_full` (cola en `QUEUE_MAX`) o
+  `queue_timeout` (esperaste más de `QUEUE_WAIT_MS`). Reintenta con backoff.
+
+**Campo `blocked_by`** (en respuestas 200 con `ld_json: null`):
+- `null` — la ficha simplemente no traía `ld+json`.
+- `waf_captcha` — el WAF sirvió un captcha interactivo; el sidecar **no** lo resuelve.
+- `waf_blocked` — bloqueo directo del WAF.
 
 ### `GET /health`
 
@@ -276,9 +286,18 @@ Sin auth, sin rate limit. Útil para monitoreo.
 }
 ```
 
-- `browser`/`context`: si el Chromium persistente está vivo.
+- `ok`: `false` (con HTTP 503) si el servicio está saturado — todos los slots ocupados
+  **y** la cola llena. **Esta es la señal a monitorear**: es el estado en el que el
+  sidecar deja de servir.
+- `browser`/`context`: si el Chromium persistente está vivo (`browser` verifica la
+  conexión real, no solo que la variable esté seteada).
 - `active`: scrapes ejecutándose en este momento.
 - `queued`: scrapes esperando un slot libre (semáforo).
+
+> Un `active` clavado en `CONCURRENCY` con `queued` creciendo y `browser:false` es el
+> síntoma de que el sidecar está colgado. En v1.4.1 y anteriores esto era permanente
+> (los slots se filtraban al morir Chromium y no volvían nunca); desde v1.4.2 los slots
+> se devuelven siempre y la cola tiene tope y timeout.
 
 ---
 
